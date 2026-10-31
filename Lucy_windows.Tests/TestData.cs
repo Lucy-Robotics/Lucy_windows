@@ -1,0 +1,58 @@
+using Lucy.Launcher;
+
+namespace Lucy.Tests;
+
+internal static class TestData
+{
+    /// <summary>The launcher_config.json shipped by lucy_ws (dev branch, 2026-10).</summary>
+    public const string LauncherConfig = """
+    {
+      "packages": [
+        { "id": "core", "name": "Core", "description": "Base robot software stack", "type": "core",
+          "dependencies": [], "conflicts": [], "command": "ros2 launch lucy_bringup lucy.launch.py",
+          "readiness_stages": [
+            { "label": "Activating environment", "check": "pgrep -f 'bin/[r]os2 launch lucy_bringup' >/dev/null 2>&1" },
+            { "label": "Starting Rosbridge", "check": "pgrep -f '[r]osbridge_websocket' >/dev/null 2>&1" },
+            { "label": "Opening Rosbridge port", "check": "bash scripts/port_open.sh ${PORT_ROSBRIDGE:-9090}" },
+            { "label": "Activating controllers", "check": "bash scripts/controllers_active.sh 1" }
+          ],
+          "readiness_timeout": 150, "default_on": false },
+        { "id": "robot_inmoov", "name": "Robot: InMoov", "type": "modifier", "dependencies": ["core"],
+          "conflicts": ["robot_thais", "robot_so_arm101"], "command": "robot_package:=inmoov_urdf",
+          "requires_pkg": "inmoov_urdf", "default_on": true },
+        { "id": "robot_so_arm101", "name": "Robot: SO-ARM101", "type": "modifier", "dependencies": ["core"],
+          "conflicts": ["robot_inmoov", "robot_thais"], "command": "robot_package:=so_arm101_urdf",
+          "requires_pkg": "so_arm101_urdf", "default_on": false },
+        { "id": "gazebo", "name": "... with Simulator", "type": "modifier", "dependencies": ["core"],
+          "conflicts": ["real"], "command": "gazebo:=true", "readiness_check": "pgrep -f '[g]z sim' >/dev/null 2>&1",
+          "readiness_timeout": 120, "default_on": false },
+        { "id": "headless", "name": "... headless", "type": "modifier", "dependencies": ["gazebo"], "conflicts": [],
+          "command": "headless:=true", "subitem": true, "default_on": false },
+        { "id": "rviz", "name": "... with Visualizer", "type": "modifier", "dependencies": ["core"], "conflicts": [],
+          "command": "rviz:=true", "readiness_check": "pgrep -x rviz2 >/dev/null 2>&1", "default_on": false },
+        { "id": "real", "name": "... with Real Hardware", "type": "modifier", "dependencies": ["core"],
+          "conflicts": ["gazebo"], "command": "real:=true", "default_on": false },
+        { "id": "control_panel", "name": "Control Panel", "description": "Web-based UI",
+          "url": "${LUCY_LCP_SCHEME}://localhost:${LUCY_LCP_PUBLISHED_HOST_PORT}", "type": "interface",
+          "dependencies": [], "conflicts": [], "command": "pixi run panel-dev",
+          "readiness_check": "bash scripts/port_open.sh ${LUCY_LCP_PUBLISHED_HOST_PORT:-4004}", "default_on": false },
+        { "id": "lucy_cli", "name": "Lucy CLI", "type": "interface", "dependencies": ["core"], "conflicts": [],
+          "command": "ros2 run lucy_cli tui", "readiness_check": "test -f /tmp/lucy_cli.ready", "nav_hint": "Ctrl-B W" },
+        { "id": "console", "name": "Open Console", "type": "tool", "dependencies": [], "conflicts": [],
+          "command": "echo \"To navigate, press Ctrl+B then W\" && bash -i" },
+        { "id": "rqt", "name": "rqt GUI", "type": "tool", "dependencies": ["core"], "conflicts": [], "command": "rqt" }
+      ]
+    }
+    """;
+
+    public static List<PackageConfig> Configs() => LauncherConfigLoader.Parse(LauncherConfig);
+
+    public static SelectionState State(params string[] hidden)
+    {
+        var items = Configs().Where(c => !hidden.Contains(c.Id))
+            .Select(c => new PackageItem(c, WindowsCommandMapper.UnsupportedReason(c))).ToList();
+        // headless depends on gazebo: unsupported transitively (LauncherEngine.Load does this too).
+        return new SelectionState(items.Select(i =>
+            i.Id == "headless" ? new PackageItem(i.Config, "Needs gazebo") : i));
+    }
+}

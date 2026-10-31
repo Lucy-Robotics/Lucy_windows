@@ -1,0 +1,73 @@
+﻿<Window x:Class="Lucy.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:Lucy.Controls"
+        xmlns:v="clr-namespace:Lucy.Views"
+        Title="Lucy" Width="1280" Height="800" MinWidth="960" MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgBrush}" Foreground="{StaticResource TextBrush}"
+        FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource FontBody}"
+        TextOptions.TextFormattingMode="Ideal" UseLayoutRounding="True"
+        Icon="/Lucy;component/assets/logo.png">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type v:InstallViewModel}">
+            <v:InstallView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type v:LauncherViewModel}">
+            <v:LauncherView />
+        </DataTemplate>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
+
+    <Border x:Name="Root" Background="{StaticResource BgBrush}" BorderBrush="{StaticResource LineStrongBrush}" BorderThickness="1">
+        <Grid>
+            <!-- .lucy-grid-bg -->
+            <Rectangle Fill="{StaticResource GridBackgroundBrush}" />
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="44" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Title bar (frosted surface-1, like the sticky header) -->
+                <Border Background="{StaticResource Surface1GlassBrush}">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                            <Image Source="/Lucy;component/assets/logo.png" Width="22" Height="22" RenderOptions.BitmapScalingMode="HighQuality" />
+                            <TextBlock Text="LUCY" Style="{StaticResource WordmarkText}" FontSize="16" Margin="10,0,0,0" VerticalAlignment="Center" />
+                            <TextBlock Text="  // " Foreground="{StaticResource HighlightBrush}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="8,2,0,0" />
+                            <TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,2,0,0" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <TextBlock Text="{Binding Version}" Foreground="{StaticResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" Margin="0,0,12,0" />
+                            <Button Style="{StaticResource TitleBarButton}" Content="&#xE921;" Click="OnMinimize" WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Minimize" />
+                            <Button x:Name="MaxButton" Style="{StaticResource TitleBarButton}" Content="&#xE922;" Click="OnMaximize" WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Maximize" />
+                            <Button Style="{StaticResource TitleBarCloseButton}" Content="&#xE8BB;" Click="OnClose" WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Close" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <ContentControl Grid.Row="1" Content="{Binding Page}" Focusable="False" />
+            </Grid>
+
+            <!-- Blocking overlay (shutdown in progress) -->
+            <Grid Visibility="{Binding OverlayVisible, Converter={StaticResource BoolToVis}}" Background="#C7141414">
+                <c:ChamferBorder Style="{StaticResource Card}" Chamfer="{StaticResource ChamferModal}" ShowHud="True"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28,22" MinWidth="380">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <v:Spinner Width="22" Height="22" Margin="0,0,14,0" />
+                            <TextBlock Text="{Binding Overlay}" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="Lucy makes sure every process it started is stopped." Style="{StaticResource MutedText}" Margin="36,10,0,0" />
+                    </StackPanel>
+                </c:ChamferBorder>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

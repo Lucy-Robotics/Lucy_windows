@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Lucy</RootNamespace>
+    <AssemblyName>Lucy</AssemblyName>
+    <Product>Lucy</Product>
+    <Company>Lucy Robotics</Company>
+    <Description>Lucy installer and launcher for Windows</Description>
+    <Version>1.0.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\logo.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StartupObject>Lucy.Program</StartupObject>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Publish defaults: one self-contained Lucy.exe -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The test project lives next to the app; keep its sources out of this build. -->
+    <Compile Remove="Lucy_windows.Tests\**" />
+    <Page Remove="Lucy_windows.Tests\**" />
+    <None Remove="Lucy_windows.Tests\**" />
+    <EmbeddedResource Remove="Lucy_windows.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="assets\logo.png" />
+    <Resource Include="assets\fonts\*.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Lucy_windows.Tests" />
+  </ItemGroup>
+
+</Project>

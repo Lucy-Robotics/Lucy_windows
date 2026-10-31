@@ -1,0 +1,16 @@
+<UserControl x:Class="Lucy.Views.LogConsole"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:Lucy.Controls">
+    <c:ChamferBorder Style="{StaticResource DeepWell}">
+        <ListBox x:Name="List" Style="{StaticResource LogList}">
+            <ListBox.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Copy selected" Click="OnCopySelected" />
+                    <MenuItem Header="Copy all" Click="OnCopyAll" />
+                    <MenuItem Header="Open log folder" Click="OnOpenLogs" />
+                </ContextMenu>
+            </ListBox.ContextMenu>
+        </ListBox>
+    </c:ChamferBorder>
+</UserControl>
