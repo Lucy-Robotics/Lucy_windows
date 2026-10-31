@@ -96,6 +96,13 @@
                         </StackPanel>
                     </CheckBox>
 
+                    <CheckBox IsChecked="{Binding ReviewConfig}" Margin="0,14,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Review repositories &amp; launcher config" />
+                            <TextBlock Text="Pause after the download to edit repos.json.local / launcher_config.json.local" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" />
+                        </StackPanel>
+                    </CheckBox>
+
                     <CheckBox IsChecked="{Binding ShowAdvanced}" Margin="0,14,0,0" Content="Advanced: choose a branch" />
                     <Grid Margin="26,10,0,0" Visibility="{Binding ShowAdvanced, Converter={StaticResource BoolToVis}}">
                         <Grid.ColumnDefinitions>
@@ -153,6 +160,84 @@
 
                 <v:LogConsole Grid.Row="1" Buffer="{Binding Log}" />
 
+                <!-- config review (between the clone and install.py) -->
+                <c:ChamferBorder Grid.Row="1" Grid.RowSpan="2" Style="{StaticResource Card}" ShowHud="True" Padding="20,16"
+                                 DataContext="{Binding ConfigEditor}"
+                                 Visibility="{Binding DataContext.IsConfiguring, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                            <TextBlock Style="{StaticResource TitleText}" FontSize="16">
+                                <Run Text="&gt; " Foreground="{StaticResource HighlightBrush}" /><Run Text="Review configuration" />
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0">
+                                lucy_ws is downloaded. Edit the local overrides now: install.py reads them when it fetches the repositories, and the launcher uses them afterwards. Both files are gitignored.
+                            </TextBlock>
+                        </StackPanel>
+
+                        <!-- footer -->
+                        <Grid DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Selected.LocalPath}" Style="{StaticResource MutedText}" FontSize="10" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button Content="Skip" Style="{StaticResource GhostButton}" Command="{Binding SkipCommand}" Margin="0,0,8,0"
+                                        ToolTip="Continue with the configuration as it is on disk" />
+                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" MinWidth="190" MinHeight="38">
+                                    <TextBlock Text="SAVE &amp; CONTINUE" FontWeight="Bold" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <TabControl ItemsSource="{Binding Documents}" SelectedItem="{Binding Selected}">
+                            <TabControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type v:ConfigDocument}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Rectangle x:Name="Led" Width="7" Height="7" Fill="{StaticResource HighlightBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Title}" />
+                                    </StackPanel>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsValid}" Value="False">
+                                            <Setter TargetName="Led" Property="Fill" Value="{StaticResource ErrorBrush}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </TabControl.ItemTemplate>
+                            <TabControl.ContentTemplate>
+                                <DataTemplate DataType="{x:Type v:ConfigDocument}">
+                                    <DockPanel Margin="0,10,0,0">
+                                        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Help}" Style="{StaticResource MutedText}" TextWrapping="Wrap" FontSize="11" />
+                                                <TextBlock Text="{Binding Origin}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
+                                                <Button Content="Defaults" Command="{Binding DefaultCommand}" Margin="0,0,6,0" ToolTip="Replace with the tracked file" />
+                                                <Button Content="Example" Command="{Binding ExampleCommand}" Margin="0,0,6,0" ToolTip="Load the .local.example shipped with lucy_ws" />
+                                                <Button Content="Format" Command="{Binding FormatCommand}" ToolTip="Re-indent the JSON" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <TextBlock x:Name="State" DockPanel.Dock="Bottom" Text="{Binding State}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
+                                                   Foreground="{StaticResource HighlightBrush}" />
+                                        <TextBox x:Name="Editor" Style="{StaticResource CodeTextBox}" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" />
+                                    </DockPanel>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsValid}" Value="False">
+                                            <Setter TargetName="State" Property="Foreground" Value="{StaticResource ErrorBrush}" />
+                                            <Setter TargetName="Editor" Property="BorderBrush" Value="{StaticResource ErrorBrush}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </TabControl.ContentTemplate>
+                        </TabControl>
+                    </DockPanel>
+                </c:ChamferBorder>
+
                 <!-- failed -->
                 <c:ChamferBorder Grid.Row="2" Margin="0,14,0,0" Chamfer="{StaticResource ChamferSm}" Background="{StaticResource ErrorSoftBrush}"
                                  BorderBrush="{StaticResource ErrorFrameBrush}" Padding="16,12"
@@ -162,7 +247,10 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding Error}" TextWrapping="Wrap" FontSize="12" VerticalAlignment="Center" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Error}" TextWrapping="Wrap" FontSize="12" />
+                            <TextBlock Text="{Binding CleanupNote}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0" />
+                        </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0">
                             <Button Content="Back" Command="{Binding BackCommand}" />
                             <Button Content="Retry" Style="{StaticResource PrimaryButton}" Command="{Binding InstallCommand}" Margin="8,0,0,0" />

@@ -40,6 +40,8 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
 {
     private readonly ShellViewModel _shell;
     private CancellationTokenSource? _cts;
+    /// <summary>Folder this installer created (cloned into). Removed if the install fails and is not retried.</summary>
+    private string? _createdFolder;
     private Task? _run;
 
     public InstallViewModel(ShellViewModel shell, InstallMode mode, string? workspace)
@@ -56,7 +58,7 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
         BrowseCommand = new RelayCommand(Browse, () => Phase == InstallPhase.Setup);
         InstallCommand = new RelayCommand(Start, () => Phase is InstallPhase.Setup or InstallPhase.Failed && PathError == null);
         CancelCommand = new AsyncCommand(CancelAsync, () => Phase == InstallPhase.Running);
-        BackCommand = new RelayCommand(() => Phase = InstallPhase.Setup, () => Phase == InstallPhase.Failed);
+        BackCommand = new AsyncCommand(BackAsync, () => Phase == InstallPhase.Failed);
         OpenLauncherCommand = new RelayCommand(OpenLauncher, () => Phase == InstallPhase.Done);
         RefreshBranchesCommand = new AsyncCommand(LoadBranchesAsync, () => Phase == InstallPhase.Setup);
         OpenLogsCommand = new RelayCommand(() => Integration.OpenFolder(Core.Log.Directory));
@@ -108,6 +110,10 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
         set { if (Set(ref _installPath, value)) ValidatePath(); }
     }
 
+    /// <summary>Shown under a failure: what happens to the downloaded folder.</summary>
+    public string CleanupNote => _createdFolder == null ? ""
+        : $"Retry continues where it stopped. Back or closing Lucy deletes {_createdFolder}.";
+
     private string? _pathError;
     public string? PathError { get => _pathError; private set { Set(ref _pathError, value); OnPropertyChanged(nameof(HasPathError)); } }
     public bool HasPathError => PathError != null;
@@ -117,6 +123,18 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
 
     private bool _developerMode;
     public bool DeveloperMode { get => _developerMode; set => Set(ref _developerMode, value); }
+
+    private bool _reviewConfig;
+    /// <summary>Pause after the clone to edit config/repos.json.local and launcher_config.json.local.</summary>
+    public bool ReviewConfig { get => _reviewConfig; set => Set(ref _reviewConfig, value); }
+
+    private ConfigEditorViewModel? _configEditor;
+    public ConfigEditorViewModel? ConfigEditor
+    {
+        get => _configEditor;
+        internal set { Set(ref _configEditor, value); OnPropertyChanged(nameof(IsConfiguring)); }
+    }
+    public bool IsConfiguring => ConfigEditor != null;
 
     private bool _showAdvanced;
     public bool ShowAdvanced
@@ -283,10 +301,12 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
         var sPixi = AddStep("pixi", "pixi (package manager)", 4);
         var sMsvc = AddStep("msvc", "MSVC Build Tools (C++ compiler)", 8);
         var sClone = AddStep("clone", "Download the Lucy workspace", 6);
+        var sConfig = ReviewConfig ? AddStep("config", "Review repositories & launcher config", 1) : null;
         var sRepos = AddStep("repos", "Fetch source repositories", 8);
         var sEnv = AddStep("env", "Create the pixi environment (ROS 2 Jazzy)", 30);
         var sBuild = AddStep("build", "Build the ROS workspace (colcon)", 24);
         var sPanel = AddStep("panel", "Install control panel dependencies", 6);
+        var sFirmware = AddStep("firmware", "Firmware toolchain (Rust)", 4);
         var sFinal = AddStep("final", "Create Start Menu shortcut", 2);
 
         try
@@ -304,7 +324,8 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
             var missing = new[] { git, python, pixi, msvc }.Where(t => !t.Found).ToList();
             if (missing.Count > 0)
             {
-                var needsWinget = missing.Any(m => m.Name != "pixi");
+                // Git (MinGit fallback) and pixi (install.ps1) install without winget.
+                var needsWinget = missing.Any(m => m.Name is not ("pixi" or "Git"));
                 if (needsWinget && !winget.Found)
                     throw new InstallError("winget is required to install the missing tools.",
                         "Install \"App Installer\" from the Microsoft Store (it provides winget), then retry.\nMissing: " +
@@ -318,7 +339,7 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
                     throw new InstallError("Installation cancelled: prerequisites are required.", null);
             }
 
-            await EnsureTool(sGit, git, () => Tooling.InstallGitAsync(LogLine, ct), () => Tooling.FindGitAsync(ct), ct);
+            await EnsureTool(sGit, git, () => Tooling.InstallGitAsync(LogLine, ct), () => Tooling.FindGitAsync(ct), ct, winget: false);
             python = await EnsureTool(sPython, python, () => Tooling.InstallPythonAsync(LogLine, ct), () => Tooling.FindPythonAsync(ct), ct);
             await EnsureTool(sPixi, pixi, () => Tooling.InstallPixiAsync(LogLine, ct), () => Tooling.FindPixiAsync(ct), ct, winget: false);
             await EnsureTool(sMsvc, msvc, () => Tooling.InstallMsvcAsync(LogLine, ct), () => Tooling.FindMsvcAsync(ct), ct);
@@ -332,6 +353,8 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
             else
             {
                 Begin(sClone, $"Cloning lucy_ws ({branch})...");
+                if (!Directory.Exists(ws.Root) || !Directory.EnumerateFileSystemEntries(ws.Root).Any())
+                    _createdFolder = ws.Root; // ours: safe to remove if the install is abandoned
                 Directory.CreateDirectory(ws.Root);
                 var gitExe = ShellEnv.Which("git") ?? throw new InstallError("Git is not available.", null);
                 var r = await ProcessRunner.RunAsync(gitExe,
@@ -348,10 +371,37 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
             settings.Branch = branch;
             settings.Save();
 
+            // 2b. Optional pause: edit the .local overrides before install.py reads them.
+            if (sConfig != null)
+            {
+                Begin(sConfig, "Review the configuration, then continue.");
+                var editor = new ConfigEditorViewModel(ws);
+                ConfigEditor = editor;
+                try
+                {
+                    using (ct.Register(editor.Cancel))
+                        await editor.Completion;
+                }
+                finally { ConfigEditor = null; }
+                ct.ThrowIfCancellationRequested();
+                foreach (var line in editor.Summary) LogLine("  " + line);
+                Complete(sConfig, StepState.Done, editor.Summary.Any(l => l.StartsWith("wrote")) ? "custom overrides" : "defaults");
+            }
+
             // 3. lucy_ws/install.py — the same installer Linux uses.
-            await RunInstallPy(ws, python, dev, sRepos, sEnv, sBuild, sPanel, ct);
+            var gitEnv = new Dictionary<string, string>();
+            if (dev)
+            {
+                gitEnv = await GitAccessPrompt.EnsureAsync(ws, LogLine, ct)
+                         ?? throw new InstallError("Installation cancelled: SSH access is required in developer mode.",
+                             "Add an SSH key, choose \"Clone over HTTPS\", or untick Developer mode.");
+            }
+            await RunInstallPy(ws, python, dev, sRepos, sEnv, sBuild, sPanel, gitEnv, ct);
             if (!ws.IsInstalled)
                 throw new InstallError("install.py finished but the workspace is not built (install\\setup.bat missing).", "See the log above.");
+
+            // 3b. Firmware toolchain (see FirmwareToolchain for why Lucy runs it itself).
+            await SetupFirmwareAsync(ws, sFirmware, ct);
 
             // 4. Finalize
             Begin(sFinal);
@@ -374,11 +424,13 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
             Progress = 100;
             Status = "Lucy is installed.";
             Log.AppendTimestamped("Installation complete.");
+            _createdFolder = null; // installed: never delete it now
+            OnPropertyChanged(nameof(CleanupNote));
             Phase = InstallPhase.Done;
         }
         catch (OperationCanceledException)
         {
-            Fail("Installation cancelled.", "Every process it started has been stopped. Run the installer again to resume.");
+            Fail("Installation cancelled.", "Every process it started has been stopped.");
         }
         catch (InstallError ex)
         {
@@ -393,6 +445,16 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
 
     private void Fail(string message, string? hint)
     {
+        OnPropertyChanged(nameof(CleanupNote));
+        // Keep the full trace even if the workspace is deleted afterwards (Back / close).
+        try
+        {
+            Log.Flush();
+            var file = Path.Combine(Core.Log.Directory, $"install-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+            File.WriteAllText(file, Log.AllText() + Environment.NewLine + message + Environment.NewLine + hint);
+            hint = (hint == null ? "" : hint + "\n") + $"Full log saved to {file}";
+        }
+        catch (Exception ex) { Core.Log.Warn("could not save the install log: " + ex.Message); }
         foreach (var s in Steps.Where(s => s.State == StepState.Running)) s.State = StepState.Failed;
         Error = hint == null ? message : message + "\n" + hint;
         Status = message;
@@ -424,7 +486,7 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
     }
 
     private async Task RunInstallPy(Workspace ws, ToolStatus python, bool dev, InstallStep sRepos, InstallStep sEnv,
-        InstallStep sBuild, InstallStep sPanel, CancellationToken ct)
+        InstallStep sBuild, InstallStep sPanel, IDictionary<string, string> gitEnv, CancellationToken ct)
     {
         var current = sRepos;
         Begin(sRepos, "Fetching source repositories...");
@@ -453,13 +515,18 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
 
         var args = new List<string> { "install.py" };
         if (dev) args.Add("--developer");
-        var env = ws.CreateEnvironment(new Dictionary<string, string>
+        var extra = new Dictionary<string, string>(gitEnv)
         {
             ["LUCY_PIXI_AUTO_UPGRADE"] = "1",
             ["LUCY_MSVC_AUTO_INSTALL"] = "1",
-        });
+            ["GIT_TERMINAL_PROMPT"] = "0", // stdin is closed: never wait for a password
+            [FirmwareToolchain.SkipEnv] = "1", // done afterwards by SetupFirmwareAsync
+        };
+        var env = ws.CreateEnvironment(extra);
         LogLine($"> {python.Path} {string.Join(" ", args)}");
         var r = await ProcessRunner.RunAsync(python.Path!, args, ws.Root, env, OnLine, ct);
+        if (!r.Ok)
+            foreach (var line in ColconLogs.FailureDetails(ws, r.Output)) LogLine(line);
         if (!r.Ok)
             throw new InstallError($"install.py failed (exit code {r.ExitCode}).",
                 r.Output.Contains("MANUAL ACTION NEEDED") ? "install.py needs a manual action — see the log." : "See the log above; fix the problem and retry.");
@@ -468,6 +535,36 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
             foreach (var s in new[] { sRepos, sEnv, sBuild, sPanel })
                 if (s.State is StepState.Pending or StepState.Running) Complete(s);
         });
+    }
+
+    /// <summary>
+    /// rustup (correctly named installer) + `pixi run firmware-setup`. Only needed to build/flash the
+    /// robot's firmware, so a failure is reported but does not fail the whole install.
+    /// </summary>
+    private async Task SetupFirmwareAsync(Workspace ws, InstallStep step, CancellationToken ct)
+    {
+        if (!FirmwareToolchain.IsUsedBy(ws))
+        {
+            Complete(step, StepState.Skipped, "not used by this lucy_ws");
+            return;
+        }
+        Begin(step, "Installing the firmware toolchain (Rust)...");
+        var ok = await FirmwareToolchain.InstallRustupAsync(ws, LogLine, ct);
+        if (ok)
+        {
+            var pixi = Tooling.PixiPath() ?? "pixi";
+            LogLine("> pixi run firmware-setup");
+            var r = await ProcessRunner.RunAsync(pixi, new[] { "run", "firmware-setup" }, ws.Root, ws.CreateEnvironment(), LogLine, ct);
+            ok = r.Ok;
+        }
+        if (ok)
+        {
+            Complete(step);
+            return;
+        }
+        LogLine("warning: the firmware toolchain could not be installed. Lucy works without it; it is only needed to build or flash the robot firmware.");
+        LogLine("         Retry later from a terminal in the workspace:  pixi run firmware-setup");
+        Complete(step, StepState.Failed, "optional — retry with: pixi run firmware-setup");
     }
 
     private async Task CancelAsync()
@@ -489,17 +586,76 @@ public sealed class InstallViewModel : ObservableObject, IShellPage
 
     public async Task<bool> RequestCloseAsync(ShellViewModel shell)
     {
-        if (Phase != InstallPhase.Running) return true;
-        if (!Dialogs.Confirm("Cancel installation", "The installation is still running. Stop it and close Lucy?", "Stop and close", "Keep installing", danger: true))
-            return false;
-        shell.Overlay = "Stopping the installation...";
+        if (Phase == InstallPhase.Running)
+        {
+            var note = _createdFolder != null ? $"\n\nThe downloaded folder {_createdFolder} will be deleted." : "";
+            if (!Dialogs.Confirm("Cancel installation", "The installation is still running. Stop it and close Lucy?" + note,
+                    "Stop and close", "Keep installing", danger: true))
+                return false;
+            shell.Overlay = "Stopping the installation...";
+            try
+            {
+                _cts?.Cancel();
+                if (_run != null) await _run;
+            }
+            finally { shell.Overlay = null; }
+        }
+        // Failed or cancelled and not retried: remove what this install created.
+        if (Phase == InstallPhase.Failed && _createdFolder != null)
+        {
+            shell.Overlay = "Removing the downloaded files...";
+            try { await RemoveCreatedFolderAsync(); }
+            finally { shell.Overlay = null; }
+        }
+        return true;
+    }
+
+    private async Task BackAsync()
+    {
+        if (_createdFolder != null)
+        {
+            _shell.Overlay = "Removing the downloaded files...";
+            try { await RemoveCreatedFolderAsync(); }
+            finally { _shell.Overlay = null; }
+        }
+        Phase = InstallPhase.Setup;
+        ValidatePath();
+    }
+
+    /// <summary>
+    /// Delete the folder this install cloned into, and forget it in settings so the next start does
+    /// not offer to resume it. rd /s /q removes read-only git objects and does not follow junctions.
+    /// </summary>
+    private async Task RemoveCreatedFolderAsync()
+    {
+        var folder = _createdFolder;
+        if (folder == null) return;
+        Log.AppendTimestamped($"Removing {folder}...");
         try
         {
-            _cts?.Cancel();
-            if (_run != null) await _run;
+            if (Directory.Exists(folder))
+            {
+                foreach (var o in Launcher.StackGuard.FindOrphans(new Workspace(folder))) ProcessInspector.KillTree(o.Id);
+                if (!await Integration.DeleteTreeAsync(folder))
+                    Log.AppendTimestamped($"Some files in {folder} could not be removed; delete the folder by hand.");
+            }
+            var settings = AppSettings.Load();
+            if (string.Equals(settings.Workspace, folder, StringComparison.OrdinalIgnoreCase))
+            {
+                settings.Workspace = null;
+                settings.Save();
+            }
+            Core.Log.Info($"removed abandoned install folder {folder}");
         }
-        finally { shell.Overlay = null; }
-        return true;
+        catch (Exception ex)
+        {
+            Core.Log.Error($"removing {folder} failed", ex);
+        }
+        finally
+        {
+            _createdFolder = Directory.Exists(folder) ? folder : null;
+            OnPropertyChanged(nameof(CleanupNote));
+        }
     }
 
     public void EmergencyShutdown() => _cts?.Cancel();

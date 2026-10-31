@@ -199,31 +199,18 @@ public sealed class ManagedProcess : IDisposable
         {
             using var reader = new StreamReader(stream, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false);
             var buf = new char[4096];
-            var line = new StringBuilder();
+            var splitter = new LineSplitter(Emit);
             int n;
             while ((n = reader.Read(buf, 0, buf.Length)) > 0)
-            {
-                for (var i = 0; i < n; i++)
-                {
-                    var c = buf[i];
-                    if (c == '\n') { Emit(line); line.Clear(); }
-                    else if (c == '\r')
-                    {
-                        // A lone \r is a progress redraw: keep only the newest segment.
-                        if (i + 1 < n && buf[i + 1] == '\n') continue;
-                        if (i + 1 < n) line.Clear();
-                    }
-                    else line.Append(c);
-                }
-            }
-            if (line.Length > 0) Emit(line);
+                splitter.Feed(buf.AsSpan(0, n));
+            splitter.Complete();
         }
         catch (Exception ex) { Log.Warn($"output pump for pid {Id} stopped: {ex.Message}"); }
     }
 
-    private void Emit(StringBuilder line)
+    private void Emit(string line)
     {
-        var text = Ansi.Replace(line.ToString(), "");
+        var text = Ansi.Replace(line, "");
         try { Output?.Invoke(text); } catch (Exception ex) { Log.Warn($"output handler threw: {ex.Message}"); }
     }
 

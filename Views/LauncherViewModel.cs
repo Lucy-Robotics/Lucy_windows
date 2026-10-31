@@ -238,15 +238,31 @@ public sealed class LauncherViewModel : ObservableObject, IShellPage
             Dialogs.Error("Python not found", "Python 3 is needed to run install.py. Reinstall it, or run the installer again (Lucy.exe --install).");
             return;
         }
+        var gitEnv = new Dictionary<string, string>();
+        if (Workspace.DevMode)
+        {
+            var log = new List<string>();
+            var env = await GitAccessPrompt.EnsureAsync(Workspace, log.Add);
+            if (env == null) return;
+            gitEnv = env;
+        }
         var steps = new List<(string, string[], IDictionary<string, string>?)>();
         var git = ShellEnv.Which("git");
         if (git != null && Directory.Exists(Path.Combine(Workspace.Root, ".git")))
             steps.Add((git, new[] { "-C", Workspace.Root, "pull", "--ff-only" }, null));
-        steps.Add((python.Path!, new[] { "install.py" }, new Dictionary<string, string>
+        steps.Add((python.Path!, new[] { "install.py" }, new Dictionary<string, string>(gitEnv)
         {
             ["LUCY_PIXI_AUTO_UPGRADE"] = "1",
             ["LUCY_MSVC_AUTO_INSTALL"] = "1",
+            ["GIT_TERMINAL_PROMPT"] = "0",
+            [FirmwareToolchain.SkipEnv] = "1",
         }));
+        if (FirmwareToolchain.IsUsedBy(Workspace) && ManagedProcess.CtrlCHelper is string lucyExe)
+        {
+            // rustup with a correctly named installer, then the rest of upstream's firmware-setup.
+            steps.Add((lucyExe, new[] { FirmwareToolchain.HelperArgument, Workspace.Root }, null));
+            steps.Add((Tooling.PixiPath() ?? "pixi", new[] { "run", "firmware-setup" }, null));
+        }
         var ok = await Engine.RunTaskAsync("update", "Update", steps);
         ShowMessage(ok ? "Update complete." : "Update failed — see the Update tab.", !ok);
         if (ok) Reload();

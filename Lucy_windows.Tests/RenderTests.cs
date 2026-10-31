@@ -28,6 +28,9 @@ public class RenderTests
         Directory.CreateDirectory(Path.Combine(wsDir, "install", "share", "inmoov_urdf"));
         File.WriteAllText(Path.Combine(wsDir, "install", "setup.bat"), "");
         File.WriteAllText(Path.Combine(wsDir, ".env"), "DEV=true\n");
+        const string realCfg = @"C:\Dev\lucy_ws\config";
+        foreach (var f in new[] { "repos.json", "repos.json.local.example" })
+            if (File.Exists(Path.Combine(realCfg, f))) File.Copy(Path.Combine(realCfg, f), Path.Combine(wsDir, "config", f));
 
         Exception? error = null;
         var t = new Thread(() =>
@@ -43,6 +46,7 @@ public class RenderTests
                 var win = new MainWindow(shell) { Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false };
 
                 shell.ShowInstaller(InstallMode.Install, null);
+                ((InstallViewModel)shell.Page!).ReviewConfig = true;
                 win.Show();
                 Save(win, Path.Combine(outDir, "1-installer-setup.png"));
 
@@ -58,6 +62,15 @@ public class RenderTests
                 for (var i = 0; i < 30; i++) inst.Log.Append($"Pixi install (RoboStack Jazzy) ... package {i} downloaded");
                 inst.Log.Flush();
                 Save(win, Path.Combine(outDir, "2-installer-progress.png"));
+
+                var editor = new ConfigEditorViewModel(new Workspace(wsDir));
+                editor.Documents[0].Text = editor.Documents[0].Text.Replace("\"branch\": \"master\"", "\"branch\": \"dev\"");
+                editor.Documents[1].Text = editor.Documents[1].Text.Replace("\"type\": \"tool\"", "\"type\": \"tool\",,");
+                inst.ConfigEditor = editor;
+                Save(win, Path.Combine(outDir, "6-config-editor.png"));
+                editor.Selected = editor.Documents[1];
+                Save(win, Path.Combine(outDir, "7-config-editor-error.png"));
+                inst.ConfigEditor = null;
 
                 shell.ShowLauncher(new Workspace(wsDir));
                 Pump(TimeSpan.FromSeconds(3)); // InitializeAsync: guard + Load

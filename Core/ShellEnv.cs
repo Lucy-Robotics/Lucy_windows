@@ -28,6 +28,7 @@ public static class ShellEnv
         var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         yield return Path.Combine(pf, "Git", "cmd");
         yield return Path.Combine(LocalAppData, "Programs", "Git", "cmd");
+        yield return Path.Combine(LocalAppData, "Programs", "MinGit", "cmd"); // Lucy's no-winget fallback
         yield return Path.Combine(LocalAppData, "Microsoft", "WindowsApps"); // winget alias
     }
 

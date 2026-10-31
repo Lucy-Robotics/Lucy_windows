@@ -11,7 +11,7 @@
     <Product>Lucy</Product>
     <Company>Lucy Robotics</Company>
     <Description>Lucy installer and launcher for Windows</Description>
-    <Version>1.0.0</Version>
+    <Version>0.3.2</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>assets\logo.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -19,7 +19,6 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Publish defaults: one self-contained Lucy.exe -->
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
-    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>

@@ -9,11 +9,13 @@ Download `Lucy.exe` from the releases page and run it. No admin account is neede
 ### First run: installer
 1. Choose the workspace folder. The default is `C:\Lucy`. `install.py` rejects paths with spaces, and folders under Program Files need admin rights, so the folder must avoid both.
 2. Lucy checks for, and installs if missing:
-   - **Git** (`winget Git.Git`)
+   - **Git**, installed for the current user. Lucy uses `winget Git.Git --scope user`; without winget, or if that fails, it downloads the official portable MinGit from the git-for-windows release (SHA-256 checked) into `%LOCALAPPDATA%\Programs\MinGit` and adds it to the user PATH.
    - **Python 3.9+** (`winget Python.Python.3.12`, user scope; the Microsoft Store alias is ignored)
    - **pixi ≥ 0.78** (official `install.ps1`)
    - **MSVC Build Tools** (VS 2022 BuildTools, C++ workload)
 3. It clones `lucy_ws` and runs its `install.py`, streaming the output. `install.py` fetches the repositories, creates the pixi environment (ROS 2 Jazzy), builds with colcon and installs the control panel.
+   - With **Review repositories & launcher config** ticked, the install pauses after the clone and before `install.py` runs. An editor opens on `config/repos.json.local` (forks, branches, extra repos) and `config/launcher_config.json.local`. Both are prefilled with the current override or a copy of the tracked file and validated as you type.
+   - Content identical to the tracked file writes no override, and an existing `.local` matching the defaults is removed. Skip keeps the files as they are on disk.
 4. It copies itself to `%LOCALAPPDATA%\Programs\Lucy\Lucy.exe`, then adds a Start Menu shortcut and an entry in *Apps & features*.
 
 If an install is interrupted, the next start offers to **resume** it. Cancelling stops every process the installer started.

@@ -116,6 +116,23 @@ public static class Integration
         return lines;
     }
 
+    /// <summary>
+    /// Delete a folder tree with rd /s /q: removes read-only files (git objects) and deletes
+    /// junctions/symlinks without following them. True when the folder is gone.
+    /// </summary>
+    public static async Task<bool> DeleteTreeAsync(string folder)
+    {
+        if (!Directory.Exists(folder)) return true;
+        var r = await ProcessRunner.RunAsync(Path.Combine(System.Environment.SystemDirectory, "cmd.exe"),
+            new[] { "/d", "/c", "rd", "/s", "/q", folder }, Path.GetTempPath());
+        if (Directory.Exists(folder))
+        {
+            Log.Warn($"could not fully remove {folder}: {r.Output.Trim()}");
+            return false;
+        }
+        return true;
+    }
+
     /// <summary>Only ever delete something that is really a lucy_ws checkout, never a drive root.</summary>
     internal static bool IsSafeToDelete(string path)
     {

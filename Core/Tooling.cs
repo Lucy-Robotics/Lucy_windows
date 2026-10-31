@@ -109,8 +109,9 @@ public static class Tooling
 
     // ---- installation ------------------------------------------------------
 
+    /// <summary>User scope, no admin: winget when available, else the portable MinGit (see GitInstaller).</summary>
     public static Task<RunResult> InstallGitAsync(Action<string> log, CancellationToken ct) =>
-        Winget(new[] { "install", "--id", "Git.Git" }, log, ct);
+        GitInstaller.InstallAsync(log, ct);
 
     public static Task<RunResult> InstallPythonAsync(Action<string> log, CancellationToken ct) =>
         Winget(new[] { "install", "--id", "Python.Python.3.12", "--scope", "user" }, log, ct);
@@ -129,7 +130,7 @@ public static class Tooling
             "--override", $"--quiet --wait --norestart --add {MsvcComponent} --includeRecommended",
         }, log, ct);
 
-    private static Task<RunResult> Winget(IEnumerable<string> args, Action<string> log, CancellationToken ct)
+    internal static Task<RunResult> Winget(IEnumerable<string> args, Action<string> log, CancellationToken ct)
     {
         var all = args.Concat(WingetCommon).ToList();
         log("> winget " + CommandLine.Join(all));
