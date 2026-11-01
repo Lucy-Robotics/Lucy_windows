@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Threading;
 using Lucy.Core;
 using Lucy.Launcher;
 using Lucy.Views;
@@ -42,6 +43,7 @@ public class InstallerEndToEndTests
     private void Run(string target, string shots)
     {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
         foreach (var dict in new[] { "Theme/Tokens.xaml", "Theme/Controls.xaml" })
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri($"pack://application:,,,/Lucy;component/{dict}") });
         DialogWindow.AutoAnswer = (title, buttons) =>
