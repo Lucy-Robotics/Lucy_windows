@@ -120,7 +120,7 @@ public class RenderTests
         if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
     }
 
-    private static void Pump(TimeSpan duration)
+    internal static void Pump(TimeSpan duration)
     {
         var end = DateTime.Now + duration;
         while (DateTime.Now < end)
@@ -132,7 +132,7 @@ public class RenderTests
         }
     }
 
-    private static void Save(Window win, string path)
+    internal static void Save(Window win, string path)
     {
         Pump(TimeSpan.FromMilliseconds(700));
         var root = (FrameworkElement)win.Content;

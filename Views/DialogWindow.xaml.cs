@@ -10,12 +10,15 @@ public partial class DialogWindow : Window
 
     public int Result { get; private set; } = -1;
 
+    internal static Func<string, string[], int>? AutoAnswer { get; set; }
+
     public static int Show(string title, string message, string? detail, bool danger, params string[] buttons) =>
         Show(title, message, detail, danger, -1, buttons);
 
     /// <param name="dangerIndex">Button drawn as destructive (red), whatever its position.</param>
     public static int Show(string title, string message, string? detail, bool danger, int dangerIndex, string[] buttons)
     {
+        if (AutoAnswer != null) return AutoAnswer(title, buttons);
         var dlg = Create(title, message, detail, danger, dangerIndex, buttons);
         dlg.ShowDialog();
         return dlg.Result;
