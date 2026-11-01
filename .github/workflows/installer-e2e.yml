@@ -1,0 +1,105 @@
+name: Installer E2E
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      lucy_ws_branch:
+        description: lucy_ws branch the installer clones
+        default: master
+  workflow_call:
+    inputs:
+      lucy_ws_branch:
+        type: string
+        required: true
+      repos_json:
+        description: config/repos.json content the installer's config review step saves as repos.json.local
+        type: string
+        default: ""
+      installer_ref:
+        type: string
+        default: master
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    if: github.repository == 'Lucy-Robotics/Lucy_windows'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Lucy-Robotics/Lucy_windows
+          ref: ${{ github.repository == 'Lucy-Robotics/Lucy_windows' && github.sha || inputs.installer_ref }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run the unit tests
+        run: dotnet test Lucy_windows.Tests/Lucy_windows.Tests.csproj --configuration Release
+
+  installer-e2e:
+    name: "Windows: install Lucy from scratch with the installer, then drive the control panel"
+    runs-on: windows-latest
+    timeout-minutes: 150
+    env:
+      LUCY_INSTALL_E2E: C:\Lucy
+      LUCY_INSTALL_E2E_SHOTS: C:\lucy-installer-e2e
+      LUCY_INSTALL_E2E_BRANCH: ${{ inputs.lucy_ws_branch || 'master' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Lucy-Robotics/Lucy_windows
+          ref: ${{ github.repository == 'Lucy-Robotics/Lucy_windows' && github.sha || inputs.installer_ref }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build the tests
+        run: dotnet build Lucy_windows.Tests/Lucy_windows.Tests.csproj --configuration Release
+
+      - name: Install the E2E browser
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            pwsh Lucy_windows.Tests/bin/Release/net8.0-windows/win-x64/playwright.ps1 install chromium
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Start-Sleep 30
+          }
+          exit 1
+
+      - name: Pin the sub-repo branches
+        if: inputs.repos_json != ''
+        shell: pwsh
+        env:
+          REPOS_JSON: ${{ inputs.repos_json }}
+        run: |
+          $env:REPOS_JSON | Set-Content -Encoding utf8 C:\repos.json
+          "LUCY_INSTALL_E2E_REPOS=C:\repos.json" >> $env:GITHUB_ENV
+
+      - name: Install from scratch, start core and the control panel, move the robot from the panel
+        run: >
+          dotnet test Lucy_windows.Tests/Lucy_windows.Tests.csproj --configuration Release --no-build
+          --filter InstallerEndToEnd --logger "console;verbosity=detailed"
+
+      - name: Collect the installer logs
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:LUCY_INSTALL_E2E_SHOTS | Out-Null
+          if (Test-Path "$env:LOCALAPPDATA\Lucy\logs") { Copy-Item -Recurse "$env:LOCALAPPDATA\Lucy\logs" "$env:LUCY_INSTALL_E2E_SHOTS\lucy-logs" }
+
+      - name: Upload the screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-e2e-${{ github.run_attempt }}
+          path: C:\lucy-installer-e2e
+          if-no-files-found: ignore
