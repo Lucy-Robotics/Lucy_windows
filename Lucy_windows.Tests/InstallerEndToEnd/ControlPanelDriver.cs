@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 namespace Lucy.Tests;
@@ -24,7 +25,7 @@ internal static class ControlPanelDriver
             await page.Locator(".ant-slider").First.WaitForAsync(new() { Timeout = 180_000 });
             ctx.Note("control panel shows the joint sliders");
 
-            await page.GetByRole(AriaRole.Button, new() { Name = "Control Robot: ON", Exact = true }).First.ClickAsync();
+            await page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex("^Control Robot(: ON)?$") }).First.ClickAsync();
             var sliders = page.Locator(".ant-slider:not(.ant-slider-disabled)");
             await sliders.First.WaitForAsync(new() { Timeout = 30_000 });
             ctx.Note("Control Robot is ON");
