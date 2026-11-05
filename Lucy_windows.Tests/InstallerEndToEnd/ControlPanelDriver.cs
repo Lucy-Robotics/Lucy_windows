@@ -5,11 +5,14 @@ namespace Lucy.Tests;
 internal static class ControlPanelDriver
 {
     private const double MovedRad = 0.05;
+    private static readonly TimeSpan ControllersTimeout = TimeSpan.FromMinutes(3);
 
     public static async Task MoveTheRobotAsync(E2EContext ctx, string url)
     {
         Assert.False(string.IsNullOrEmpty(url), "the launcher reports no control panel URL");
         using var joints = await JointStates.ConnectAsync(new Uri("ws://127.0.0.1:9090"));
+        await joints.WaitAsync("/joint_states", s => s.Count > 0, ControllersTimeout);
+        ctx.Note("the controllers publish /joint_states");
         using var pw = await Playwright.CreateAsync();
         await using var browser = await pw.Chromium.LaunchAsync(new() { Headless = true });
         var page = await browser.NewPageAsync(new() { ViewportSize = new() { Width = 1600, Height = 1000 } });
