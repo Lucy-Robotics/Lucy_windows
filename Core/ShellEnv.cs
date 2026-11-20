@@ -10,9 +10,11 @@ namespace Lucy.Core;
 /// </summary>
 public static class ShellEnv
 {
-    // Variables that would make pixi/conda think it is already inside an activated env.
+    // Variables that would make pixi/conda think it is already inside an activated env,
+    // and PowerShell 7's module path, which Windows PowerShell cannot load.
     private static readonly string[] Scrub =
     {
+        "PSModulePath",
         "CONDA_PREFIX", "CONDA_DEFAULT_ENV", "CONDA_SHLVL", "CONDA_PROMPT_MODIFIER",
         "PIXI_PROJECT_ROOT", "PIXI_PROJECT_NAME", "PIXI_PROJECT_MANIFEST", "PIXI_ENVIRONMENT_NAME",
         "PIXI_IN_SHELL", "PIXI_EXE", "PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV",
