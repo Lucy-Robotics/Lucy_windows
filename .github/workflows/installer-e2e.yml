@@ -95,6 +95,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force $env:LUCY_INSTALL_E2E_SHOTS | Out-Null
           if (Test-Path "$env:LOCALAPPDATA\Lucy\logs") { Copy-Item -Recurse "$env:LOCALAPPDATA\Lucy\logs" "$env:LUCY_INSTALL_E2E_SHOTS\lucy-logs" }
+          if (Test-Path "$env:USERPROFILE\.ros\log") { Copy-Item -Recurse "$env:USERPROFILE\.ros\log" "$env:LUCY_INSTALL_E2E_SHOTS\ros-logs" }
 
       - name: Upload the screenshots and logs
         if: always()
