@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Lucy.Core;
 
 namespace Lucy.Tests;
@@ -95,6 +96,31 @@ public class ProcessTests
     {
         var end = DateTime.UtcNow + timeout;
         while (!cond() && DateTime.UtcNow < end) await Task.Delay(100);
+    }
+
+    [Fact]
+    public async Task WindowsPowerShellIgnoresThePowerShell7ModulePathOfItsParent()
+    {
+        var dir = Directory.CreateTempSubdirectory("lucypsmodules").FullName;
+        var pwsh7Archive = Directory.CreateDirectory(Path.Combine(dir, "modules", "Microsoft.PowerShell.Archive", "9.0.0")).FullName;
+        File.WriteAllText(Path.Combine(pwsh7Archive, "Microsoft.PowerShell.Archive.psd1"),
+            "@{ ModuleVersion = '9.0.0'; PowerShellVersion = '7.4'; CompatiblePSEditions = @('Core'); CmdletsToExport = @('Expand-Archive') }");
+        var zip = Path.Combine(dir, "pixi.zip");
+        using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create)) archive.CreateEntry("pixi.exe");
+        var parent = Environment.GetEnvironmentVariable("PSModulePath");
+        Environment.SetEnvironmentVariable("PSModulePath", Path.Combine(dir, "modules"));
+        try
+        {
+            var r = await ProcessRunner.RunAsync("powershell.exe", new[]
+            {
+                "-NoProfile", "-Command", $"Expand-Archive -Path '{zip}' -DestinationPath '{Path.Combine(dir, "bin")}'",
+            });
+            Assert.True(File.Exists(Path.Combine(dir, "bin", "pixi.exe")), r.Output);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PSModulePath", parent);
+        }
     }
 }
 
