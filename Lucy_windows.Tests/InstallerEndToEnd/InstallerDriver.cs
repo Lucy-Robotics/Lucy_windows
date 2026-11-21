@@ -22,8 +22,10 @@ internal static class InstallerDriver
         install.InstallCommand.Execute(null);
         var started = DateTime.Now;
         var progressSaved = false;
+        var seen = new Dictionary<string, StepState>();
         ctx.WaitUntil(() =>
         {
+            NoteStepChanges(ctx, install, seen, started);
             if (install.ConfigEditor is { } editor)
             {
                 editor.Documents[0].Text = File.ReadAllText(repos!);
@@ -43,6 +45,16 @@ internal static class InstallerDriver
         foreach (var s in install.Steps) ctx.Note($"  {s.Title}: {s.State} {s.Detail}");
         Assert.True(install.Phase == InstallPhase.Done, $"{install.Error}\n{Tail(install.Log.AllText(), 60)}");
         return install;
+    }
+
+    private static void NoteStepChanges(E2EContext ctx, InstallViewModel install, Dictionary<string, StepState> seen, DateTime started)
+    {
+        foreach (var s in install.Steps)
+        {
+            if (seen.TryGetValue(s.Key, out var was) && was == s.State) continue;
+            seen[s.Key] = s.State;
+            ctx.Note($"{DateTime.Now - started:mm\\:ss} {s.Title}: {s.State} {s.Detail}");
+        }
     }
 
     private static void SaveLog(E2EContext ctx, InstallViewModel install)
