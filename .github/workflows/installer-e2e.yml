@@ -106,7 +106,7 @@ jobs:
           --filter InstallerEndToEnd --logger "console;verbosity=detailed"
 
       - name: Save the conda package cache
-        if: github.event_name != 'pull_request' && steps.pixi_cache_restore.outputs.cache-hit != 'true'
+        if: github.event_name == 'push' && steps.pixi_cache_restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: C:\pixi-cache
