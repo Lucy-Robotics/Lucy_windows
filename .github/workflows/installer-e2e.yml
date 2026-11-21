@@ -52,6 +52,7 @@ jobs:
       LUCY_INSTALL_E2E: C:\Lucy
       LUCY_INSTALL_E2E_SHOTS: C:\lucy-installer-e2e
       LUCY_INSTALL_E2E_BRANCH: ${{ inputs.lucy_ws_branch || 'master' }}
+      PIXI_CACHE_DIR: C:\pixi-cache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,10 +85,32 @@ jobs:
           $env:REPOS_JSON | Set-Content -Encoding utf8 C:\repos.json
           "LUCY_INSTALL_E2E_REPOS=C:\repos.json" >> $env:GITHUB_ENV
 
+      - name: Name the conda package cache after the lucy_ws lock file
+        id: pixi_cache
+        shell: bash
+        run: |
+          git clone -q --depth 1 --filter=blob:none --no-checkout --branch "$LUCY_INSTALL_E2E_BRANCH" https://github.com/Lucy-Robotics/lucy_ws.git "$RUNNER_TEMP/lucy_ws_lock"
+          echo "key=pixi-cache-win-64-$(git -C "$RUNNER_TEMP/lucy_ws_lock" rev-parse HEAD:pixi.lock)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the conda package cache
+        id: pixi_cache_restore
+        uses: actions/cache/restore@v4
+        with:
+          path: C:\pixi-cache
+          key: ${{ steps.pixi_cache.outputs.key }}
+          restore-keys: pixi-cache-win-64-
+
       - name: Install from scratch, start core and the control panel, move the robot from the panel
         run: >
           dotnet test Lucy_windows.Tests/Lucy_windows.Tests.csproj --configuration Release --no-build
           --filter InstallerEndToEnd --logger "console;verbosity=detailed"
+
+      - name: Save the conda package cache
+        if: github.event_name != 'pull_request' && steps.pixi_cache_restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: C:\pixi-cache
+          key: ${{ steps.pixi_cache.outputs.key }}
 
       - name: Collect the installer logs
         if: always()
